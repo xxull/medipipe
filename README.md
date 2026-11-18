@@ -255,6 +255,10 @@ python test_mod4_执行引擎.py
 python test_mod7_入库.py
 python test_url_safety.py
 python test_b_框架B.py
+
+# 界面全流程（真的去点按钮，需要先导入数据）
+python tools/测_A界面.py
+python tools/测_B界面.py
 ```
 
 每个脚本自断言，末尾打印 `结果：全部通过`。这些测试不联网、不花钱。

@@ -1,0 +1,15 @@
+[project]
+name = "framework-a-microkernel"
+version = "0.2.0"
+description = "A local, plugin-based data production microkernel with a Streamlit UI."
+requires-python = ">=3.10"
+license = { text = "Non-Commercial License 1.0 (see LICENSE)" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["legacy_旧版", "__pycache__", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]

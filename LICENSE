@@ -1,0 +1,100 @@
+非商业使用许可 1.0
+Non-Commercial License 1.0
+
+版权所有 (c) 2026 本项目贡献者
+Copyright (c) 2026 the project contributors
+
+────────────────────────────────────────────────────────────────────
+
+【中文】
+
+第一条 授权范围
+  在遵守本许可全部条款的前提下，任何人可以免费获取、使用、复制、
+  修改、合并、发布本软件及其衍生作品，用于**非商业目的**。
+
+第二条 商业用途的禁止
+  未经著作权人书面授权，**不得**将本软件（含修改版、衍生版）用于
+  任何商业目的，包括但不限于：
+    1. 销售、出租、许可本软件；
+    2. 将本软件作为收费产品、收费服务的组成部分；
+    3. 用于向客户收费的诊疗辅助、数据分析、咨询等服务；
+    4. 在医院、诊所、药企、保险、医疗器械等机构的经营活动中部署使用；
+    5. 内部使用但直接产生营业收入的情形。
+
+  "商业目的"包括以营利为目标的个人、公司、事业单位及其他组织的行为。
+  学术研究、教学、个人学习、公益项目、开源项目集成、非营利的科研合作，
+  均不属于商业目的，可以自由使用。
+
+第三条 商业授权
+  如需商业使用，请联系著作权人取得单独的商业许可。
+  商业许可与免费许可是两套授权，需分别签订。
+
+第四条 署名
+  复制、修改、分发本软件或其衍生作品时，必须保留本许可文件，
+  并在显著位置注明原始出处。
+
+第五条 免责声明
+  本软件按"现状"提供，不附带任何明示或默示的担保，包括但不限于
+  适销性、特定用途适用性和非侵权性的担保。在任何情况下，著作权人
+  或贡献者均不对因本软件或本软件的使用而产生的任何索赔、损害或
+  其他责任负责。
+
+第六条 医疗用途特别提示
+  本软件是数据处理工具，**不构成医疗器械，不提供诊断或治疗建议**。
+  不得用于替代医务人员的专业判断。将其用于任何临床决策前，
+  使用者应自行评估合规性并承担全部责任。
+
+第七条 本许可的终止
+  违反本许可任一条款，授权自动终止。终止后应停止使用并删除副本。
+
+────────────────────────────────────────────────────────────────────
+
+【English】
+
+1. Grant
+   Subject to the terms of this License, any person may obtain, use, copy,
+   modify, merge, and distribute this software and derivative works free of
+   charge for NON-COMMERCIAL purposes only.
+
+2. Prohibition of Commercial Use
+   Commercial use of this software, including modified or derivative versions,
+   is NOT permitted without prior written permission from the copyright holder.
+   Commercial use includes, without limitation:
+     (a) selling, renting, or licensing the software;
+     (b) including it in a paid product or paid service;
+     (c) using it to provide fee-based diagnostic assistance, data analysis,
+         or consulting services;
+     (d) deploying it in the business operations of hospitals, clinics,
+         pharmaceutical companies, insurers, or medical device vendors;
+     (e) internal use that directly generates revenue.
+
+   Commercial purpose means any activity by an individual, company, institution,
+   or other organization aimed at profit. Academic research, teaching, personal
+   study, non-profit projects, open-source integration, and non-profit research
+   collaboration are NOT commercial purposes and are permitted.
+
+3. Commercial Licensing
+   For commercial use, a separate commercial license must be obtained from the
+   copyright holder. The free license and the commercial license are distinct.
+
+4. Attribution
+   Any copy, modification, or distribution must retain this License file and
+   clearly credit the original source.
+
+5. Disclaimer of Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+   OR OTHER DEALINGS IN THE SOFTWARE.
+
+6. Medical Notice
+   This software is a data-processing tool. It is NOT a medical device and does
+   NOT provide diagnosis or treatment advice. It must not replace professional
+   medical judgment. Users are solely responsible for compliance and for any
+   clinical use.
+
+7. Termination
+   Any violation of this License terminates the grant automatically. Upon
+   termination you must stop using the software and delete all copies.

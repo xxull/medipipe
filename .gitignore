@@ -1,0 +1,40 @@
+# ---- 密钥 ----
+.env
+.env.*
+!.env.example
+data/hf_token.txt
+data/*token*
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# ---- 本地数据（不进仓库）----
+# 注意：这里必须写 data/* 而不是 data/。
+# git 的规则是"父目录被排除后，子目录无法再被包含"，
+# 写 data/ 会把 data/样例数据/ 一起挡掉。
+data/*
+!data/README.md
+!data/样例数据/
+!data/样例数据/**
+
+# ---- 日志与临时文件 ----
+*.log
+data/*日志*.txt
+.DS_Store
+Thumbs.db
+
+# ---- 模型与索引 ----
+*.bin
+*.npy
+*.parquet
+*.sqlite
+*.sqlite3

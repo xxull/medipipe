@@ -102,14 +102,20 @@ def for_diseases(names: List[str], limit: int = 5) -> List[Dict]:
     out: List[Dict] = []
     seen = set()
     try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(drugs)")}
+        if not cols:
+            return []
+        has_q = "quality" in cols
+        sel = "brand_name, generic_name, indications, %s" % ("quality" if has_q else "NULL")
         for name in names[:4]:
             kw = _clean(name)
             if len(kw) < 2:
                 continue
             rows = conn.execute(
-                "SELECT brand_name, generic_name, indications, quality FROM drugs"
+                "SELECT %s FROM drugs"
                 " WHERE indications LIKE ? OR brand_name LIKE ? OR generic_name LIKE ?"
-                " ORDER BY IFNULL(quality,0) DESC LIMIT ?",
+                " ORDER BY %s DESC LIMIT ?"
+                % (sel, "IFNULL(quality,0)" if has_q else "id"),
                 ("%%%s%%" % kw, "%%%s%%" % kw, "%%%s%%" % kw, limit),
             ).fetchall()
             for brand, generic, ind, q in rows:
@@ -129,20 +135,34 @@ def for_diseases(names: List[str], limit: int = 5) -> List[Dict]:
     return out[:12]
 
 
+#: drug_info 需要的列（库里可能是别的工具建的表，缺列要能兜住）
+_INFO_COLS = ["brand_name", "generic_name", "manufacturer", "indications",
+              "dosage", "warnings", "contraindications", "route",
+              "product_type", "quality"]
+
+
 def drug_info(name: str) -> Dict:
-    """查单个药的详情（说明书要点）。"""
+    """
+    查单个药的详情（说明书要点）。
+
+    注意：`drugs` 表可能是不同脚本建的（跑药品.py / 导入开放数据.py / 入库插件），
+    列不一定齐全。以前这里写死一串列名，公开版就报 no such column，
+    现在按实际列拼 SQL，缺的列给空值。
+    """
     conn = sqlite3.connect(str(DB), timeout=60)
     try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(drugs)")}
+        if not cols:
+            return {}
+        use = [c for c in _INFO_COLS if c in cols]
         row = conn.execute(
-            "SELECT brand_name, generic_name, manufacturer, indications, dosage,"
-            " warnings, contraindications, route, product_type, quality"
-            " FROM drugs WHERE brand_name=? OR generic_name=? LIMIT 1",
-            (name, name),
+            "SELECT %s FROM drugs WHERE brand_name=? OR generic_name=? LIMIT 1"
+            % ", ".join(use), (name, name),
         ).fetchone()
     finally:
         conn.close()
     if not row:
         return {}
-    keys = ["brand_name", "generic_name", "manufacturer", "indications", "dosage",
-            "warnings", "contraindications", "route", "product_type", "quality"]
-    return dict(zip(keys, row))
+    out = dict.fromkeys(_INFO_COLS, "")
+    out.update(dict(zip(use, row)))
+    return out

@@ -360,18 +360,10 @@ def _page_similar() -> None:
             do_tr = st.button("翻译成%s" % zh_lang_name, key="btn_sim_tr", width="stretch",
                               help="把疾病名和药名翻译成目标语言。首次约 20 秒（本地模型），"
                                    "同一批内容再点会秒出。")
-        with ctr2:
-            if st.session_state.get("sim_tr_target") == target:
-                ms = st.session_state.get("sim_tr_ms") or 0
-                st.caption("✅ 已翻译（%s，用时 %.1f 秒）。点「恢复原文」可以切回。"
-                           % (zh_lang_name, ms / 1000.0))
-                if st.button("恢复原文", key="btn_sim_rst"):
-                    st.session_state["sim_tr_target"] = None
-                    st.session_state["sim_tr_rows"] = None
-                    st.rerun()
-            else:
-                st.caption("点按钮后约需 20 秒。不点就显示原文。")
 
+        # 注意顺序：必须**先算再显示状态**。
+        # 以前把状态显示写在计算前面，点完按钮这一轮页面已经画完旧状态，
+        # 于是「已翻译 / 恢复原文」要等用户再点一次别的东西才冒出来。
         if do_tr:
             if not b_翻译.preflight():
                 st.error("本地模型没启动（Ollama 不是运行状态）。"
@@ -404,6 +396,18 @@ def _page_similar() -> None:
                     "dis": new_dis, "drug": new_drug, "dept": new_depts}
                 st.session_state["sim_tr_target"] = target
                 st.session_state["sim_tr_ms"] = int((time.time() - t_tr) * 1000)
+
+        with ctr2:
+            if st.session_state.get("sim_tr_target") == target:
+                ms = st.session_state.get("sim_tr_ms") or 0
+                st.caption("✅ 已翻译（%s，用时 %.1f 秒）。点「恢复原文」可以切回。"
+                           % (zh_lang_name, ms / 1000.0))
+                if st.button("恢复原文", key="btn_sim_rst"):
+                    st.session_state["sim_tr_target"] = None
+                    st.session_state["sim_tr_rows"] = None
+                    st.rerun()
+            else:
+                st.caption("点按钮后约需 20 秒。不点就显示原文。")
 
         if st.session_state.get("sim_tr_target") == target and st.session_state.get("sim_tr_rows"):
             dis_rows = st.session_state["sim_tr_rows"]["dis"]

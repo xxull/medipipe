@@ -26,10 +26,18 @@ OUT = ROOT / "data" / "样例数据"
 
 def export_drugs(n: int = 100) -> int:
     c = sqlite3.connect(str(DB), timeout=60)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(drugs)")}
+    if not cols:
+        print("药品样例：库里没有 drugs 表，跳过")
+        c.close()
+        return 0
+    # quality 列不一定有（跑药品.py 建的表没这列）
+    gate = "IFNULL(quality,0)>=70 AND " if "quality" in cols else ""
+    order = "IFNULL(quality,0)" if "quality" in cols else "id"
     rows = c.execute(
         "SELECT brand_name, generic_name, manufacturer, indications, dosage, warnings, route"
-        " FROM drugs WHERE IFNULL(quality,0)>=70 AND IFNULL(indications,'')<>''"
-        " ORDER BY quality DESC LIMIT ?", (n,)
+        " FROM drugs WHERE %sIFNULL(indications,'')<>''"
+        " ORDER BY %s DESC LIMIT ?" % (gate, order), (n,)
     ).fetchall()
     c.close()
     path = OUT / "药品样例.jsonl"
@@ -46,11 +54,21 @@ def export_drugs(n: int = 100) -> int:
 
 
 def export_symptoms(n: int = 300) -> int:
+    """
+    从 dayi 症状词条里抽「标题 + 一句话说明」。
+
+    公开版仓库没有 dayi 数据（版权），这时跳过，不算失败。
+    """
     c = sqlite3.connect(str(DB), timeout=60)
-    rows = c.execute(
-        "SELECT title, text FROM dayi_pages WHERE type='symptom' LIMIT ?", (n,)
-    ).fetchall()
-    c.close()
+    try:
+        rows = c.execute(
+            "SELECT title, text FROM dayi_pages WHERE type='symptom' LIMIT ?", (n,)
+        ).fetchall()
+    except sqlite3.Error:
+        print("症状样例：库里没有 dayi_pages（公开版正常），跳过")
+        return 0
+    finally:
+        c.close()
     path = OUT / "症状样例.jsonl"
     with open(path, "w", encoding="utf-8") as f:
         for title, text in rows:

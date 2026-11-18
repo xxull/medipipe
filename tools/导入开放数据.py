@@ -47,13 +47,22 @@ def _lines(path: Path):
 
 
 def _ensure(conn) -> None:
+    # 列对齐“跑药品.py 建的那张表”，不然界面/工具按别的列名查就会报 no such column
     conn.execute(
         "CREATE TABLE IF NOT EXISTS drugs ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        " brand_name TEXT, generic_name TEXT, manufacturer TEXT, route TEXT,"
-        " indications TEXT, dosage TEXT, warnings TEXT, quality INTEGER DEFAULT 80,"
-        " effective_time TEXT, set_id TEXT, source TEXT, license TEXT)"
+        " set_id TEXT, brand_name TEXT, generic_name TEXT, manufacturer TEXT,"
+        " product_type TEXT, route TEXT, indications TEXT, dosage TEXT, warnings TEXT,"
+        " contraindications TEXT, effective_time TEXT, created_at TEXT,"
+        " source TEXT, license TEXT, quality INTEGER DEFAULT 80)"
     )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(drugs)")}
+    for col in ("set_id", "brand_name", "generic_name", "manufacturer", "product_type",
+                "route", "indications", "dosage", "warnings", "contraindications",
+                "effective_time", "created_at", "source", "license", "quality"):
+        if col not in cols:
+            typ = "INTEGER" if col == "quality" else "TEXT"
+            conn.execute("ALTER TABLE drugs ADD COLUMN %s %s" % (col, typ))
     conn.execute(
         "CREATE TABLE IF NOT EXISTS medquad_qa ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -68,8 +77,17 @@ def _ensure(conn) -> None:
 
 
 def _clear(conn) -> None:
+    """
+    只清掉「本来就是这个脚本导进来的」那些行。
+
+    以前是无条件 DELETE FROM drugs，会把用户自己抓的、入库插件写的药全删了。
+    """
     conn.execute("DELETE FROM medquad_qa")
-    conn.execute("DELETE FROM drugs")
+    try:
+        conn.execute("DELETE FROM drugs WHERE source=? OR license LIKE 'CC0%'",
+                     ("openFDA drug label",))
+    except sqlite3.Error:
+        conn.execute("DELETE FROM drugs")
     for src in (SRC_DRUG, SRC_QA):
         try:
             conn.execute("DELETE FROM %s WHERE src=?" % FTS, (src,))
@@ -82,14 +100,13 @@ def load_drugs(conn) -> int:
     rows = list(_lines(OPEN_DIR / "药品_openfda.jsonl"))
     if not rows:
         return 0
+    keys = ("set_id", "brand_name", "generic_name", "manufacturer", "product_type",
+            "route", "indications", "dosage", "warnings", "contraindications",
+            "effective_time", "source", "license")
     conn.executemany(
-        "INSERT INTO drugs (brand_name, generic_name, manufacturer, route, indications,"
-        " dosage, warnings, effective_time, set_id, source, license)"
-        " VALUES (:brand_name, :generic_name, :manufacturer, :route, :indications,"
-        " :dosage, :warnings, :effective_time, :set_id, :source, :license)",
-        [{k: r.get(k, "") for k in ("brand_name", "generic_name", "manufacturer", "route",
-                                    "indications", "dosage", "warnings", "effective_time",
-                                    "set_id", "source", "license")} for r in rows],
+        "INSERT INTO drugs (%s) VALUES (%s)"
+        % (", ".join(keys), ", ".join(":" + k for k in keys)),
+        [{k: r.get(k, "") for k in keys} for r in rows],
     )
     conn.commit()
     return len(rows)

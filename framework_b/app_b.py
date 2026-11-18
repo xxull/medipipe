@@ -351,6 +351,7 @@ def _page_similar() -> None:
 
     dis_rows = r["diseases"]
     drug_rows = r["drugs"]
+    depts = r.get("departments") or []
     zh_lang_name = "中文" if target == "zh" else "English"
 
     if target != "原文":
@@ -385,13 +386,29 @@ def _page_similar() -> None:
                     if drug_rows:
                         dm = b_翻译.batch([g for g, _n, _p in drug_rows], target)
                         new_drug = [(dm.get(g, g), n, p) for g, n, p in drug_rows]
-                st.session_state["sim_tr_rows"] = {"dis": new_dis, "drug": new_drug}
+                    # 科室分布里的「代表疾病」也是英文诊断名，得一起翻，
+                    # 否则会出现「科室=呼吸内科、代表疾病=Cellulitis…」这种中英混排
+                    new_depts = depts
+                    if depts:
+                        dept_names = [x["name"] for d in depts for x in d.get("疾病", [])]
+                        dm2 = b_翻译.batch(dept_names, target) if dept_names else {}
+                        new_depts = [
+                            {
+                                **d,
+                                "疾病": [{**x, "name": dm2.get(x["name"], x["name"])}
+                                         for x in d.get("疾病", [])],
+                            }
+                            for d in depts
+                        ]
+                st.session_state["sim_tr_rows"] = {
+                    "dis": new_dis, "drug": new_drug, "dept": new_depts}
                 st.session_state["sim_tr_target"] = target
                 st.session_state["sim_tr_ms"] = int((time.time() - t_tr) * 1000)
 
         if st.session_state.get("sim_tr_target") == target and st.session_state.get("sim_tr_rows"):
             dis_rows = st.session_state["sim_tr_rows"]["dis"]
             drug_rows = st.session_state["sim_tr_rows"]["drug"]
+            depts = st.session_state["sim_tr_rows"].get("dept") or depts
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
         ["① 类似疾病", "② 治疗药物", "③ 常用药物", "④ 总结", "⑤ 查看病例"])
@@ -401,7 +418,6 @@ def _page_similar() -> None:
         _clickable_table(
             [{"疾病": d, "次数": n, "占比": "%.0f%%" % (p * 100)} for d, n, p in dis_rows],
             key="tbl_dis", kind="disease", name_col="疾病")
-        depts = r.get("departments") or []
         if depts:
             st.markdown("**科室分布（参考）**")
             st.dataframe(
@@ -523,9 +539,21 @@ def _page_search() -> None:
 def _page_summary() -> None:
     st.caption("粘一份病历或上传照片 → 输出「主诉 / 现病史 / 既往史 / 关键检查 / 诊断 / 处理」六段。"
                "只根据原文提炼，不推测、不给治疗建议。")
+
+    # 总结默认走主模型：本地 4B 要 20~60 秒，主模型 2~5 秒
+    key_ok = b_总结.has_key()
+    if key_ok:
+        st.caption("当前走**主模型**（几秒出结果）。想换回本地模型，把 Key 清掉即可。")
+    else:
+        st.warning("病历总结现在走**主模型**（DeepSeek 等），需要先配 Key。"
+                   "到「自检」标签页填 Key（或 .env 里写 MY_LLM_KEY=…），2~5 秒就能出结果。")
+        st.caption("没有 Key 也能凑合：勾选下面用本地模型，约 20~60 秒。")
+    slow_local = (not key_ok) and st.checkbox("没有 Key，先用本地模型（慢）", value=False)
+
     mode = st.radio("输入方式", ["粘贴文字", "上传图片"], horizontal=True)
 
     text = ""
+    blocked = (not key_ok) and (not slow_local)
     if mode == "粘贴文字":
         text = st.text_area(
             "病历原文",
@@ -537,11 +565,15 @@ def _page_summary() -> None:
                 "双肺可闻及湿啰音，胸片示右下肺片状影。诊断社区获得性肺炎，予抗感染。"
             ),
         )
-        go = st.button("生成总结", type="primary", disabled=len(text.strip()) < 20)
+        go = st.button("生成总结", type="primary",
+                       disabled=blocked or len(text.strip()) < 20)
         image = None
     else:
         image = st.file_uploader("上传病历照片", type=["png", "jpg", "jpeg", "webp"])
-        go = st.button("识别并总结", type="primary", disabled=image is None)
+        go = st.button("识别并总结", type="primary", disabled=blocked or image is None)
+        if not key_ok:
+            st.caption("注：读图（OCR）只能用本地多模态模型，这一步本身就慢；"
+                       "配了 Key 的话后面的六段总结会快很多。")
 
     if not go:
         return
@@ -549,7 +581,7 @@ def _page_summary() -> None:
     if mode == "上传图片" and image is not None:
         tmp = ROOT / "data" / ("_upload_%s" % image.name)
         tmp.write_bytes(image.getbuffer())
-        with st.spinner("读图中…"):
+        with st.spinner("读图中（本地多模态模型，约 10~40 秒）…"):
             try:
                 text = b_总结.read_image(str(tmp))
             except Exception as exc:
@@ -561,9 +593,10 @@ def _page_summary() -> None:
             st.warning("转写内容太少，可能图片模糊。")
             return
 
-    with st.spinner("提炼中…"):
+    spinner = "主模型提炼中（约 2~5 秒）…" if (key_ok and not slow_local) else "本地模型提炼中（约 20~60 秒）…"
+    with st.spinner(spinner):
         try:
-            result = b_总结.summarize(text)
+            result = b_总结.summarize(text, use_master=(key_ok and not slow_local))
         except Exception as exc:
             st.error("总结失败：%s" % exc)
             return
@@ -582,8 +615,10 @@ def _page_health() -> None:
         _light(label, bool(item.get("ok")), str(item.get("detail", "?")))
 
     st.divider()
-    st.markdown("### 主模型 Key（可选）")
-    st.caption("B 的核心能力全部走本地模型，不配 Key 也能用；配 Key 只是让总结/翻译质量更高。")
+    st.markdown("### 主模型 Key")
+    st.caption("「病历总结」默认走主模型，需要这个 Key（2~5 秒出结果）；"
+               "不配也能用本地模型总结，只是慢（20~60 秒）。"
+               "检索、关键词、相似病例、翻译全部走本地，不依赖 Key。")
 
     from framework_b import b_配置
 

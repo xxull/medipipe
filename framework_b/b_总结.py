@@ -3,14 +3,20 @@
 病历总结（b_总结）
 =========================================================================
 两个入口：
-    文字  → 直接把病历文本交给本地模型提炼
-    图片  → 先让多模态模型读图（OCR/描述），再提炼
+    文字  → 交给**主模型**（DeepSeek 等，需要 Key）提炼，2~5 秒
+    图片  → 先让本机多模态模型读图（OCR / 转写），再把转写交给主模型总结
+
+为什么默认走主模型？
+------------------------------------------------------------------------
+    本机 qwen3-vl:4b 是思考模型，一份病历要"想"30~60 秒，体验很差；
+    主模型几秒钟就回来，质量通常还更好。所以总结要配 Key（「自检」页填）。
+    没 Key 时退回本地模型，慢但能用。
 
 输出固定六段，方便对照：
     主诉 / 现病史 / 既往史 / 关键检查 / 诊断 / 处理
 
 纪律
--------------------------------------------------------------------------
+------------------------------------------------------------------------
     只根据原文写，不推测、不补全、不给治疗建议。
     原文没写的段落，输出"（原文未提及）"。
 =========================================================================
@@ -26,6 +32,12 @@ from typing import Any, Dict
 
 MODEL = "qwen3-vl:4b"
 URL = "http://127.0.0.1:11434/api/generate"
+
+#: 主模型用的系统提示词：角色 + 纪律（六段格式在 PROMPT 里）
+MASTER_SYSTEM = (
+    "你是病历整理助手。只根据用户给的病历原文提炼要点，"
+    "不推测、不补全、不给治疗建议。原文里没有的信息写（原文未提及）。"
+)
 
 PROMPT = """把下面这份病历压缩成要点。严格按这个格式，每段一行：
 
@@ -64,11 +76,31 @@ def _ollama(prompt: str, images=None, timeout: int = 300) -> str:
         return json.loads(r.read().decode("utf-8")).get("response", "")
 
 
+def has_key() -> bool:
+    """配了主模型 Key 吗？（和框架 A 共用 .env 的 MY_LLM_KEY）"""
+    try:
+        from framework_b import b_配置
+
+        return bool(b_配置.get_key())
+    except Exception:
+        return False
+
+
+def summarize_master(text: str) -> str:
+    """用主模型总结（快）。Key 无效时抛异常，由调用方决定是否退回本地。"""
+    from core.llm_主模型 import MasterLLM
+
+    llm = MasterLLM()
+    out = llm.chat(MASTER_SYSTEM, PROMPT % text[:6000], max_tokens=900, temperature=0.2)
+    return (out or "").strip() or "（主模型没有返回内容）"
+
+
 def read_image(path: str) -> str:
     """
     读图：让多模态模型把图片里的文字和关键信息写出来。
 
     这一步只做"转写"，不做总结——分开做，效果比一步到位稳。
+    转写只能靠本地多模态模型（主模型读不了图片）。
     """
     p = Path(path)
     if not p.exists():
@@ -82,11 +114,26 @@ def read_image(path: str) -> str:
     return (out or "").strip()
 
 
-def summarize(text: str) -> str:
-    """把病历文本提炼成六段要点。"""
+def summarize(text: str, use_master: bool | None = None) -> str:
+    """
+    把病历文本提炼成六段要点。
+
+    use_master=None 时自动判断：有 Key 就用主模型，没 Key 用本地模型。
+    主模型调用失败（Key 过期、断网、超预算）会自动退回本地，不让页面炸。
+    """
     t = (text or "").strip()
     if len(t) < 20:
         return "文本太短（少于 20 字），没法总结。"
+
+    if use_master is None:
+        use_master = has_key()
+
+    if use_master:
+        try:
+            return summarize_master(t)
+        except Exception:
+            pass          # 退回本地模型
+
     out = _ollama("/no_think " + (PROMPT % t[:6000]), timeout=300)
     return (out or "").strip() or "（模型没有返回内容）"
 

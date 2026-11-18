@@ -127,6 +127,16 @@ def search_fts(keyword: str, limit: int = 5, db: Optional[str] = None) -> List[D
                 if r:
                     rec = {"id": r[0], "科室": r[3], "疾病": r[4],
                            "问": str(r[1])[:300], "答": str(r[2])[:300]}
+            elif src == "dayi":
+                # 中文词条（dayi）：doc 是原始 url
+                try:
+                    r = conn.execute(
+                        "SELECT title, type, text, url FROM dayi_pages WHERE url=?", (doc,)
+                    ).fetchone()
+                except sqlite3.Error:
+                    r = None
+                if r:
+                    rec = {"标题": r[0], "类型": r[1], "文本": str(r[2])[:300], "链接": r[3]}
             elif src == "medquad_qa":
                 # 公开版：MedQuAD 问答（doc 形如 qa_123）
                 qid = doc.split("_", 1)[1] if "_" in doc else ""

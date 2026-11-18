@@ -51,6 +51,14 @@ SOURCES = [
         FROM drugs"""),
     ("note_discharge",
      "SELECT 'note_'||hadm_id||'_'||rowid, text FROM note_discharge WHERE text IS NOT NULL"),
+    # 中文词条（dayi）：doc 用 url，和 并入dayi索引.py 保持一致
+    ("dayi",
+     """SELECT url, IFNULL(title,'')||' '||IFNULL(text,'')||' '||IFNULL(fields,'')
+        FROM dayi_pages"""),
+    # 公开数据里的英文问答（只有导入过开放数据才有这张表，没有就跳过）
+    ("medquad_qa",
+     """SELECT 'qa_'||id, IFNULL(focus,'')||' '||IFNULL(question,'')||' '||IFNULL(answer,'')
+        FROM medquad_qa"""),
 ]
 
 

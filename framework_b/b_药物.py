@@ -27,6 +27,18 @@ def _clean(w: str) -> str:
     return re.sub(r"[^\w\u4e00-\u9fff\- ]", "", (w or "").strip())
 
 
+def has_zh_labels() -> bool:
+    """库里有中文药品说明书吗？（公开版没有，只有 openFDA 英文数据）"""
+    conn = sqlite3.connect(str(DB), timeout=30)
+    try:
+        return bool(conn.execute(
+            "SELECT 1 FROM dayi_pages WHERE type='drug' LIMIT 1").fetchone())
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
+
+
 def for_disease_zh(name: str, limit: int = 8) -> List[Dict]:
     """
     在中文药品说明书（dayi）里按病名找药。

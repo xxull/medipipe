@@ -169,8 +169,10 @@ def _drug_table(dis_en, dis_zh, case_drugs, target: str = "原文") -> None:
     if uniq:
         _clickable_table(uniq[:8], key="tbl_zh_drug", kind="drug", name_col="药物")
         st.caption("匹配依据是说明书里的「适应症」原文。只作参考，**不是处方建议**。")
-    else:
+    elif b_药物.has_zh_labels():
         st.info("中文说明书里没有匹配到该适应症的药物。")
+    else:
+        st.caption("本库没有中文药品说明书（公开版只带 openFDA 英文数据），下面看「英文药品库兜底」。")
 
     st.markdown("**相似病例里实际用过的药**")
     if case_drugs:

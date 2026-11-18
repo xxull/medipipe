@@ -35,7 +35,7 @@ ACCENT = (255, 75, 75)
 CASES = [
     ("自检", "tools/自检.py"),
     ("检索", "tools/演示_检索.py"),
-    ("流水线", "test_mod4_执行引擎.py"),
+    ("流水线", "tools/演示_流水线.py"),
 ]
 
 
@@ -95,6 +95,8 @@ def render(lines, cmd: str) -> Image.Image:
     for ln in lines:
         if y > H - 24:
             break
+        ln = (ln.replace("✅", "").replace("❌", "").replace("⚠️", "").replace("⚠", "")
+                .replace("→", "->").replace("←", "<-"))
         mark, text = "", ln
         for emo, col in (("✅", GREEN), ("❌", RED), ("⚠️", (210, 153, 34)), ("⚠", (210, 153, 34))):
             if ln.startswith(emo):

@@ -105,7 +105,7 @@ def main() -> int:
         for _ in range(17):          # 每个科室 17 条 ≈ 204 条
             n += 1
             lo, hi, band = random.choice(AGES)
-            age = random.randint(lo, hi)
+            age = random.randint(max(lo, 1), hi)   # 不出现“0岁”，免得像错数据
             sx = random.sample(info["symptoms"], k=random.randint(2, 3))
             disease = random.choice(info["diseases"])
             drugs = random.sample(info["drugs"], k=random.randint(1, 3))

@@ -39,6 +39,23 @@ def main() -> int:
     print("[%s] 二次翻译走缓存（%.2f 秒）" % ("PASS" if fast else "FAIL", time.time() - t0))
     ok = ok and fast
 
+    # 整批翻英文：不能原样返回中文（踩过：原样返回被写进缓存，之后一直显示中文）
+    zh2 = ["慢性阻塞性肺疾病急性加重", "社区获得性肺炎", "支气管哮喘", "氨溴索", "孟鲁司特"]
+    m3 = b_翻译.batch(zh2, "en")
+    left = [k for k in zh2 if b_翻译._CJK.search(m3.get(k, k))]
+    good = not left
+    print("[%s] 整批翻英文没有残留中文%s" % ("PASS" if good else "FAIL",
+                                             "" if good else "：" + "、".join(left)))
+    ok = ok and good
+
+    # 缓存里不能有语言不对的译文
+    from framework_b import b_翻译 as T
+
+    hits = [T._lang_ok(k, m3.get(k, ""), "en") for k in zh2]
+    good = all(hits)
+    print("[%s] 缓存译文的语言校验" % ("PASS" if good else "FAIL"))
+    ok = ok and good
+
     print("\n结果：", "全部通过 ✅" if ok else "有失败 ❌")
     return 0 if ok else 1
 

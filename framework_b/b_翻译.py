@@ -129,8 +129,8 @@ def text(src: str, target: str = "zh") -> str:
         return s
     key = hashlib.sha1(("%s|%s" % (target, s)).encode("utf-8")).hexdigest()
     hit = _cache_get(key)
-    # 缓存命中也要做数字校验：里面可能存着旧的坏译文
-    if hit and _numbers_ok(s, hit):
+    # 缓存命中也要校验：里面可能存着旧的坏译文（数字被吃、或原样返回原文）
+    if hit and _numbers_ok(s, hit) and _lang_ok(s, hit, target):
         return hit
 
     if target == "en":
@@ -143,9 +143,9 @@ def text(src: str, target: str = "zh") -> str:
             out = _clean(_ollama(prompt))
         except Exception:
             out = ""
-        # 结果校验：空、只剩逗号/数字、或者数字对不上，都当失败重试一次
+        # 结果校验：空、只剩逗号/数字、数字对不上、或者语言没变，都当失败重试一次
         if (out and not re.fullmatch(r"[\d\s\-/:.,]*", out)
-                and _numbers_ok(s, out)):
+                and _numbers_ok(s, out) and _lang_ok(s, out, target)):
             _cache_put(key, out, target)
             return out
     return s
@@ -221,6 +221,23 @@ def _already_in(src: str, target: str) -> bool:
     return not has_cjk and bool(re.search(r"[A-Za-z]", s))
 
 
+def _lang_ok(src: str, dst: str, target: str) -> bool:
+    """
+    译文是不是真的换成了目标语言。
+
+    实测踩过：模型偶尔原样返回输入（尤其整批的时候），而“原样返回”看着
+    像翻成功了，于是被写进缓存 —— 之后这条就一直显示中文。所以除了数字，
+    还要卡语言：翻英文不能留汉字，翻中文不能一个汉字都没有。
+    """
+    s, d = str(src or "").strip(), str(dst or "").strip()
+    if not d or d == s:
+        return False
+    has_cjk = bool(_CJK.search(d))
+    if target == "en":
+        return not has_cjk and bool(re.search(r"[A-Za-z]", d))
+    return has_cjk
+
+
 def preflight(timeout: float = 2.0) -> bool:
     """快速探测本地模型服务是否在线（避免请求挂到超时才报错）。"""
     import urllib.request
@@ -256,8 +273,8 @@ def batch(names, target: str = "zh") -> Dict[str, str]:
             continue
         key = hashlib.sha1(("%s|%s" % (target, name)).encode("utf-8")).hexdigest()
         hit = _cache_get(key)
-        # 缓存里也可能躺着旧的坏译文（比如数字被吃掉的），命中也要校验
-        if hit and _numbers_ok(name, hit):
+        # 缓存里也可能躺着旧的坏译文（数字被吃掉、或者原样返回中文），命中也要校验
+        if hit and _numbers_ok(name, hit) and _lang_ok(name, hit, target):
             out[name] = hit
         else:
             todo.append(name)
@@ -296,7 +313,7 @@ def batch(names, target: str = "zh") -> Dict[str, str]:
             if i < len(cleaned):
                 cand = _clean(cleaned[i])
                 if (cand and not re.fullmatch(r"[\d\s\-/:.,]*", cand)
-                        and _numbers_ok(name, cand)):
+                        and _numbers_ok(name, cand) and _lang_ok(name, cand, target)):
                     got[name] = cand
                     key = hashlib.sha1(("%s|%s" % (target, name)).encode("utf-8")).hexdigest()
                     _cache_put(key, cand, target)

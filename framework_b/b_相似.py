@@ -160,20 +160,30 @@ def _attr_index(n: int) -> Dict[str, int]:
     return idx
 
 
+def _has_col(conn, table: str, col: str) -> bool:
+    """表里有没有这个列（老库 / 只跑过一半初始化脚本时可能缺）。"""
+    try:
+        return any(r[1] == col for r in conn.execute("PRAGMA table_info(%s)" % table))
+    except sqlite3.Error:
+        return False
+
+
 def _gender_mask(n: int) -> Dict[str, np.ndarray]:
     """按性别做掩码（index 顺序与 ids 对齐）。"""
     cached = _cache.get("gender_masks")
     if cached is not None and _cache.get("gender_n") == n:
         return cached
 
-    import sqlite3
-
     idx_of = _attr_index(n)
     conn = sqlite3.connect(str(ROOT / "data" / "records.db"), timeout=60)
     try:
-        rows = conn.execute(
-            "SELECT IFNULL(gender,''), case_id FROM case_corpus WHERE IFNULL(gender,'')<>''"
-        ).fetchall()
+        _cache["gender_col"] = _has_col(conn, "case_corpus", "gender")
+        if _cache["gender_col"]:
+            rows = conn.execute(
+                "SELECT IFNULL(gender,''), case_id FROM case_corpus WHERE IFNULL(gender,'')<>''"
+            ).fetchall()
+        else:
+            rows = []
     finally:
         conn.close()
 
@@ -200,16 +210,18 @@ def _band_mask(n: int) -> Dict[str, np.ndarray]:
     if cached is not None and _cache.get("band_n") == n:
         return cached
 
-    import sqlite3
-
     ids = _cache.get("ids") or []
     idx_of = {cid: i for i, cid in enumerate(ids[:n])}
 
     conn = sqlite3.connect(str(ROOT / "data" / "records.db"), timeout=60)
     try:
-        rows = conn.execute(
-            "SELECT IFNULL(NULLIF(age_band,''),'') AS b, case_id FROM case_corpus"
-        ).fetchall()
+        _cache["band_col"] = _has_col(conn, "case_corpus", "age_band")
+        if _cache["band_col"]:
+            rows = conn.execute(
+                "SELECT IFNULL(NULLIF(age_band,''),'') AS b, case_id FROM case_corpus"
+            ).fetchall()
+        else:
+            rows = []
     finally:
         conn.close()
 
@@ -265,17 +277,25 @@ def find_similar(
         mask = _band_mask(len(ids)).get(age_band)
         # 库里没有这个年龄段时，静默忽略会让用户以为筛过了，必须明确报错
         if mask is None or not mask.any():
+            if _cache.get("band_col") is False:
+                hint = "（病例库没有年龄字段，先跑 python tools\\补年龄段.py）"
+            else:
+                hint = "，换一个年龄段或选「全部」"
             return {"query": text, "usable": False, "diseases": [], "drugs": [],
                     "departments": [], "summary": "", "matched": [],
-                    "error": "库里没有「%s」这个年龄段的病例，换一个年龄段或选「全部」" % age_band}
+                    "error": "库里没有「%s」这个年龄段的病例%s" % (age_band, hint)}
         sims = np.where(mask, sims, -1.0)
 
     if gender:
         mask = _gender_mask(len(ids)).get(gender)
         if mask is None or not mask.any():
+            if _cache.get("gender_col") is False:
+                hint = "（病例库没有性别字段，先跑 python tools\\补性别.py）"
+            else:
+                hint = ""
             return {"query": text, "usable": False, "diseases": [], "drugs": [],
                     "departments": [], "summary": "", "matched": [],
-                    "error": "库里没有「%s」的病例" % gender}
+                    "error": "库里没有「%s」的病例%s" % (gender, hint)}
         sims = np.where(mask, sims, -1.0)
 
     # SQLite 的 SQL 变量上限是 999，top_k 必须夹住，否则 IN (...) 会炸

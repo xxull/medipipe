@@ -46,23 +46,23 @@ def main() -> int:
         " case_id TEXT PRIMARY KEY, source TEXT, text TEXT,"
         " diseases TEXT, drugs TEXT, created_at TEXT)"
     )
-    # 老库可能缺列，补齐
+    # 老库可能缺列，补齐（gender 少了会让「性别」筛选直接报 no such column）
     cols = {r[1] for r in conn.execute("PRAGMA table_info(case_corpus)")}
-    for col, typ in (("dept", "TEXT"), ("age", "INTEGER"), ("age_band", "TEXT")):
+    for col, typ in (("dept", "TEXT"), ("age", "INTEGER"), ("age_band", "TEXT"), ("gender", "TEXT")):
         if col not in cols:
             conn.execute("ALTER TABLE case_corpus ADD COLUMN %s %s" % (col, typ))
 
     conn.execute("DELETE FROM case_corpus WHERE source='sample'")
     conn.executemany(
         "INSERT OR REPLACE INTO case_corpus"
-        " (case_id, source, text, diseases, drugs, created_at, dept, age, age_band)"
-        " VALUES (?,?,?,?,?,?,?,?,?)",
+        " (case_id, source, text, diseases, drugs, created_at, dept, age, age_band, gender)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)",
         [
             (r["case_id"], "sample", r["text"],
              json.dumps(r["diseases"], ensure_ascii=False),
              json.dumps(r["drugs"], ensure_ascii=False),
              time.strftime("%Y-%m-%d %H:%M:%S"),
-             r["dept"], r["age"], r["age_band"])
+             r["dept"], r["age"], r["age_band"], r.get("gender", ""))
             for r in rows
         ],
     )

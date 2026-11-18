@@ -38,6 +38,35 @@ URL = "http://127.0.0.1:11434/api/embeddings"
 
 _cache: Dict[str, Any] = {}
 
+#: 参与缓存的几个文件：(库、向量、id 列表)。任何一个换了，缓存必须作废
+_STAMP_FILES = (DATA / "records.db", DATA / "case_vectors.bin", DATA / "case_ids.jsonl")
+
+
+def _stamp():
+    """这几个文件的 (mtime, size)：用来判断库/向量是不是被重建过。"""
+    out = []
+    for p in _STAMP_FILES:
+        try:
+            st = p.stat()
+            out.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            out.append(None)
+    return tuple(out)
+
+
+def _refresh_if_changed() -> None:
+    """
+    库或向量换了就清缓存。
+
+    踩过的坑：进程里缓存了"性别全空"的掩码，之后跑 `补性别.py` 把库补好了，
+    界面还是坚持说「库里没有男」—— 因为缓存永远不失效，只能重启服务。
+    现在按文件戳判断，补完字段刷新页面就生效。
+    """
+    stamp = _stamp()
+    if _cache.get("stamp") != stamp:
+        _cache.clear()
+        _cache["stamp"] = stamp
+
 # 模块级导入：原来写在 show() 里，每调一次就 import 一次（几十微秒 × 每次展示）。
 # 词表模块缺失时置 None，调用处已做判空。
 try:
@@ -86,6 +115,7 @@ def _load():
     优先读 .bin + .jsonl（追加写，构建时不会整文件重写）；
     没有就退回旧的 .npy 格式。
     """
+    _refresh_if_changed()
     if _cache.get("mat") is not None:
         return _cache["mat"], _cache["ids"]
 
@@ -195,6 +225,9 @@ def _gender_mask(n: int) -> Dict[str, np.ndarray]:
 
     _cache["gender_masks"] = masks
     _cache["gender_n"] = n
+    # 全是空的话别缓存：多半是还没跑 补性别.py，缓存住就一直显示"没有男/女"
+    if not any(m.any() for m in masks.values()):
+        _cache.pop("gender_masks", None)
     return masks
 
 
@@ -235,6 +268,9 @@ def _band_mask(n: int) -> Dict[str, np.ndarray]:
 
     _cache["band_masks"] = masks
     _cache["band_n"] = n
+    # 同样：全空不缓存，等用户跑完 补年龄段.py 再算
+    if not any(m.any() for m in masks.values()):
+        _cache.pop("band_masks", None)
     return masks
 
 

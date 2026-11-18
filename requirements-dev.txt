@@ -1,3 +1,5 @@
 -r requirements.txt
-pytest>=8
-ruff>=0.6
+
+# 开发/文档用：ruff 做 lint，pillow 用来生成演示 GIF
+ruff==0.17.1
+pillow==10.4.0

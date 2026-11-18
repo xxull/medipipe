@@ -20,6 +20,27 @@
                                         框架 B（检索 / 相似病例 / 总结 / 翻译）
 ```
 
+## 先看三个演示（都是真跑出来的）
+
+| 一键自检 | 检索效果 | 生产端流水线 |
+|---|---|---|
+| ![自检](docs/gif/自检.gif) | ![检索](docs/gif/检索.gif) | ![流水线](docs/gif/流水线.gif) |
+| `python tools/自检.py` | `python tools/演示_检索.py` | `python test_mod4_执行引擎.py` |
+
+GIF 是把真实命令输出录下来的，不是画的示意图；数字就是你跑那一刻库里的数字。
+自己重新生成：`python tools/生成演示GIF.py`（需要 `pip install -r requirements-dev.txt`）。
+
+## 文档
+
+| 文档 | 讲什么 |
+|---|---|
+| [使用说明](docs/使用说明.md) | 从零装到跑起来，两个界面每个按钮干什么 |
+| [插件接口](docs/插件接口.md) | 怎么写自己的插件（20 行起步） |
+| [常见错误与修复](docs/常见错误与修复.md) | 按报错原文查：为什么 + 怎么修 |
+| [数据说明](docs/数据说明.md) | 哪些是合成数据、哪些是公开数据、怎么验证 |
+
+出问题先跑 `python tools/自检.py`，它会把环境/数据/模型/Key/端口挨个查一遍并告诉你下一步。
+
 ---
 
 ## 为什么做这个
@@ -55,6 +76,16 @@ python tools/导入开放数据.py --rebuild
 
 > 演示站就是这么喂的：3,000 条合成病例 + 20,000 条 openFDA 药品 + 16,000 条 MedQuAD 问答 + 15,000 条疾病本体词表（全部是免费公开数据）。
 
+**合成数据怎么证明是合成的？** 生成脚本就在仓库里（`tools/生成样例数据.py`，纯 `random`），
+种子固定 `20260101`，任何人重跑都得到**逐字节相同**的文件：
+
+```bash
+python tools/生成样例数据.py
+git diff data/样例数据/     # 应该没有任何变化
+```
+
+详细说明（含为什么不放真实病历）：[数据说明](docs/数据说明.md)。
+
 > 真实病历（MIMIC-IV / eICU / 中文处方数据）受协议或版权限制，
 > **本仓库不附带、不再分发**。怎么自己拿到并导入，见下面「接真实数据」一节。
 
@@ -68,6 +99,15 @@ python tools/导入开放数据.py --rebuild
 
 ## 快速开始（5 分钟）
 
+### 0. 先自检（可选，但省事）
+
+```bash
+python tools/自检.py
+```
+
+它会检查 Python 版本、依赖、数据库、向量、Ollama、模型、Key、端口，
+哪项不合格就直接告诉你该敲什么命令。
+
 ### 1. 装依赖
 
 ```bash
@@ -77,7 +117,7 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -r requirements.txt    # 版本全部锁死（==），和自己装出来的一致
 ```
 
 Windows 也可以直接双击 `setup.bat`。
@@ -202,9 +242,10 @@ core/                   执行引擎、加载器、扫描器、日志、重试�
 ui/                     框架 A 三页 + 画布
 plugins/                生产端插件（抓取 / 抽取 / 入库 / 药品 / OCR …）
 framework_b/            框架 B：检索应用
-tools/                  导入、建库、建索引、建向量、样例生成、开放数据下载、爬虫
+tools/                  导入、建库、建索引、建向量、样例生成、开放数据下载、爬虫、自检
 data/样例数据/           合成病例 + 症状词表
 data/开放数据/           openFDA 药品 + MedQuAD 问答
+docs/                   使用说明 / 插件接口 / 常见错误 / 数据说明 + 演示 GIF
 test_*.py               验收脚本（不花钱、不联网）
 ```
 
@@ -213,7 +254,9 @@ test_*.py               验收脚本（不花钱、不联网）
 ## 常用命令
 
 ```bash
+python tools/自检.py              # 环境/数据/模型/Key/端口 全查一遍
 python tools/看总体状态.py        # 库多大、哪些表有数据
+python tools/演示_检索.py          # 命令行看检索效果（不用开界面）
 python tools/建搜索索引.py        # 重建全文索引（FTS5 + 二元分词）
 python tools/建向量.py            # 建/续建向量（追加写，可断点续跑）
 python tools/清翻译缓存.py         # 检查并清理坏译文

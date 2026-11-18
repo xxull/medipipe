@@ -47,7 +47,8 @@ python -m streamlit run app.py --server.port=8501
 
 ```bash
 ollama pull bge-m3        # 检索向量（1024 维）
-ollama pull qwen3-vl:4b   # 总结 / 翻译 / 读图
+ollama pull qwen2.5:3b    # 翻译首选：非思考模型，一个词名约 0.2 秒
+ollama pull qwen3-vl:4b   # 总结 / 读图（可选，能读 PDF、报告截图）
 ```
 
 不装 Ollama 也能启动，但「相似病例」「病历总结」「翻译」不可用；

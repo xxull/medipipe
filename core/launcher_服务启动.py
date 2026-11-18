@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 import urllib.request
@@ -28,7 +29,7 @@ from typing import Tuple
 try:
     from config_配置 import OLLAMA_BASE, OLLAMA_EXE  # type: ignore
 except Exception:  # 配置读不到时的兜底
-    OLLAMA_EXE = r"D:\ollama\ollama.exe"
+    OLLAMA_EXE = shutil.which("ollama") or "ollama"
     OLLAMA_BASE = "http://127.0.0.1:11434"
 
 

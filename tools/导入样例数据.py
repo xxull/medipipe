@@ -6,7 +6,7 @@
 -------------------------------------------------------------------------
     1. 把 data/样例数据/病例样例.jsonl 写进 case_corpus（source='sample'）
     2. 顺手把它们塞进全文索引（关键词检索能搜到）
-    3. 给这 204 条建向量（bge-m3，约 20 秒）
+    3. 给这些病例建向量（bge-m3）
     4. 打印结果，告诉你可以打开 B 了
 
 用法
@@ -85,7 +85,7 @@ def main() -> int:
     print("已建全文索引：%d 条" % len(buf))
     conn.close()
 
-    print("\n开始建向量（204 条，约 20 秒）…")
+    print("\n开始建向量（%d 条，约 %d 秒）…" % (len(rows), max(20, len(rows) // 20)))
     rc = subprocess.run([sys.executable, "-u", str(ROOT / "tools" / "建向量.py")], cwd=str(ROOT)).returncode
     if rc != 0:
         print("建向量失败（返回 %d）。可稍后手动跑：python tools\\建向量.py" % rc)

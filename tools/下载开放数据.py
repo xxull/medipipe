@@ -22,13 +22,16 @@
 =========================================================================
 """
 import argparse
+import io
 import json
+import re
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +42,9 @@ UA = "medipipe-open-data/1.0 (+https://github.com/; contact: local user)"
 OPENFDA = "https://api.fda.gov/drug/label.json"
 MEDQUAD_API = "https://api.github.com/repos/abachaa/MedQuAD/contents/%s?ref=master"
 MEDQUAD_RAW = "https://raw.githubusercontent.com/abachaa/MedQuAD/master/%s"
+MEDQUAD_ZIP = "https://codeload.github.com/abachaa/MedQuAD/zip/refs/heads/master"
+DOID_OBO = ("https://raw.githubusercontent.com/DiseaseOntology/HumanDiseaseOntology/"
+            "main/src/ontology/HumanDO.obo")
 
 #: MedQuAD 里挑几个覆盖面广的目录
 MEDQUAD_DIRS = [
@@ -74,19 +80,23 @@ def _short(text, n: int) -> str:
 
 # ---------------------------------------------------------------- openFDA
 def fetch_openfda(want: int) -> int:
-    """按页抓 openFDA 药品标签，只要带适应症的。"""
+    """按页抓 openFDA 药品标签，只要带适应症的。
+
+    openFDA 单页最多 1000 条，所以一页要 1000（以前写 100，抓 2 万条要 200 次请求）。
+    """
     path = OUT / "药品_openfda.jsonl"
     got = 0
     skip = 0
+    page = 1000
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         while got < want:
-            n = min(100, want - got)
+            n = min(page, want - got)
             url = "%s?search=_exists_:openfda.brand_name&limit=%d&skip=%d" % (OPENFDA, n, skip)
             try:
                 data = _json(url)
             except Exception as exc:  # noqa: BLE001
-                print("  openFDA 第 %d 页失败：%s" % (skip // 100 + 1, str(exc)[:80]))
+                print("  openFDA 第 %d 页失败：%s" % (skip // page + 1, str(exc)[:80]))
                 break
             rows = data.get("results") or []
             if not rows:
@@ -199,23 +209,114 @@ def fetch_medquad(want: int) -> int:
     return got
 
 
+def fetch_medquad_zip(want: int) -> int:
+    """
+    一次性下整包（codeload zip），本地解压解析 —— 比逐个文件请求快几十倍。
+    整包含 12 个 NIH 站点的全部 4.7 万条问答。
+    """
+    path = OUT / "问答_medquad.jsonl"
+    print("  下载 MedQuAD 整包（约 15 MB）…")
+    blob = _get(MEDQUAD_ZIP, timeout=600)
+    print("  解压解析…")
+    got = 0
+    files = 0
+    tmp = path.with_suffix(".tmp")
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf, open(tmp, "w", encoding="utf-8") as f:
+        for name in zf.namelist():
+            if not name.endswith(".xml"):
+                continue
+            parts = name.split("/")
+            folder = parts[1] if len(parts) > 2 else ""
+            files += 1
+            for row in _parse_medquad(zf.read(name), folder):
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                got += 1
+                if want and got >= want:
+                    break
+            if want and got >= want:
+                break
+    tmp.replace(path)
+    print("问答 → %s（%d 条，来自 %d 个 XML，整包模式）" % (path, got, files))
+    return got
+
+
+def fetch_doid(want: int) -> int:
+    """
+    人类疾病本体（Disease Ontology, HumanDO.obo）—— 免费的疾病词表。
+    许可：CC BY 4.0。取 id / 名称 / 定义 / 同义词 / 上级。
+    """
+    path = OUT / "疾病词表_doid.jsonl"
+    print("  下载 Disease Ontology（约 7 MB）…")
+    text = _get(DOID_OBO, timeout=600).decode("utf-8", "replace")
+
+    got = 0
+    cur = {}
+    tmp = path.with_suffix(".tmp")
+
+    def write(f, row):
+        nonlocal got
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        got += 1
+
+    with open(tmp, "w", encoding="utf-8") as f:
+        for line in text.splitlines():
+            line = line.rstrip("\n")
+            if line == "[Term]":
+                if cur.get("name"):
+                    write(f, cur)
+                cur = {"id": "", "name": "", "definition": "", "synonyms": [], "parents": []}
+                if want and got >= want:
+                    break
+                continue
+            if not line or line.startswith("["):
+                continue
+            if line.startswith("id: "):
+                cur["id"] = line[4:]
+            elif line.startswith("name: "):
+                cur["name"] = line[6:]
+            elif line.startswith("def: "):
+                m = re.match(r'def: "(.*?)"', line)
+                if m:
+                    cur["definition"] = m.group(1)
+            elif line.startswith("synonym: "):
+                m = re.match(r'synonym: "(.*?)"', line)
+                if m:
+                    cur["synonyms"].append(m.group(1))
+            elif line.startswith("is_a: "):
+                cur["parents"].append(line[6:].split("!")[0].strip())
+        if cur.get("name") and not (want and got >= want):
+            write(f, cur)
+    tmp.replace(path)
+    print("疾病词表 → %s（%d 条，CC BY 4.0）" % (path, got))
+    return got
+
+
 def main() -> int:
+    global OUT
     ap = argparse.ArgumentParser()
     ap.add_argument("--openfda", type=int, default=1000)
     ap.add_argument("--medquad", type=int, default=3000)
-    ap.add_argument("--only", choices=["openfda", "medquad"], default=None)
+    ap.add_argument("--medquad-zip", action="store_true",
+                    help="用整包 zip 抓 MedQuAD（快；默认按文件逐个抓）")
+    ap.add_argument("--doid", type=int, default=0, help="下载疾病本体（CC BY 4.0）")
+    ap.add_argument("--out", default=str(OUT), help="输出目录（默认 data/开放数据）")
+    ap.add_argument("--only", choices=["openfda", "medquad", "doid"], default=None)
     args = ap.parse_args()
 
+    OUT = Path(args.out)
     OUT.mkdir(parents=True, exist_ok=True)
     total = 0
     if args.only in (None, "openfda"):
         total += fetch_openfda(args.openfda)
     if args.only in (None, "medquad"):
-        total += fetch_medquad(args.medquad)
+        total += (fetch_medquad_zip(args.medquad) if args.medquad_zip
+                  else fetch_medquad(args.medquad))
+    if args.only in (None, "doid") and (args.doid or args.only == "doid"):
+        total += fetch_doid(args.doid)
 
     for p in sorted(OUT.glob("*.jsonl")):
         print("  %-24s %6.1f KB" % (p.name, p.stat().st_size / 1024))
-    print("合计 %d 条" % total)
+    print("合计 %d 条 → %s" % (total, OUT))
     return 0
 
 

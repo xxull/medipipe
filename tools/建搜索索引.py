@@ -59,6 +59,11 @@ SOURCES = [
     ("medquad_qa",
      """SELECT 'qa_'||id, IFNULL(focus,'')||' '||IFNULL(question,'')||' '||IFNULL(answer,'')
         FROM medquad_qa"""),
+    # 公开的疾病本体词表（Disease Ontology，CC BY 4.0）
+    ("doid",
+     """SELECT 'doid_'||id,
+        IFNULL(name,'')||' '||IFNULL(synonyms,'')||' '||IFNULL(definition,'')
+        FROM doid"""),
 ]
 
 

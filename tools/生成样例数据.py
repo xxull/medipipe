@@ -96,13 +96,17 @@ AGES = [(0, 17, "0-17"), (18, 44, "18-44"), (45, 64, "45-64"), (65, 90, "65+")]
 
 
 def main() -> int:
+    # 可传条数：python tools\生成样例数据.py 5000（默认每科室 17 条 ≈ 204）
+    want = int(sys.argv[1]) if len(sys.argv) > 1 else 204
+    per_dept = max(1, want // max(1, len(DEPTS)))
+
     random.seed(20260101)
     OUT.mkdir(parents=True, exist_ok=True)
 
     rows = []
     n = 0
     for dept, info in DEPTS.items():
-        for _ in range(17):          # 每个科室 17 条 ≈ 204 条
+        for _ in range(per_dept):     # 默认每科室 17 条 ≈ 204 条
             n += 1
             lo, hi, band = random.choice(AGES)
             age = random.randint(max(lo, 1), hi)   # 不出现“0岁”，免得像错数据

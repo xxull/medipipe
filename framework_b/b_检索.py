@@ -71,6 +71,7 @@ DEFAULT_TABLES = [
     "case_corpus",          # 病例库（诊断+用药+症状文本）
     "huatuo_qa",            # 中文问答
     "medquad_qa",           # 英文医学问答（公开数据，CC BY 4.0）
+    "doid",                 # 疾病本体词表（公开数据，CC BY 4.0）
     "drugs",                # 药品
     "miv_d_icd_diagnoses",  # 诊断字典
     "miv_d_icd_procedures",  # 手术字典
@@ -137,6 +138,18 @@ def search_fts(keyword: str, limit: int = 5, db: Optional[str] = None) -> List[D
                     r = None
                 if r:
                     rec = {"标题": r[0], "类型": r[1], "文本": str(r[2])[:300], "链接": r[3]}
+            elif src == "doid":
+                # 疾病本体词表：doc 形如 doid_123
+                did = doc.split("_", 1)[1] if "_" in doc else ""
+                try:
+                    r = conn.execute(
+                        "SELECT name, synonyms, definition, doid FROM doid WHERE id=?",
+                        (did,)).fetchone()
+                except sqlite3.Error:
+                    r = None
+                if r:
+                    rec = {"疾病": r[0], "别名": r[1], "定义": str(r[2])[:400],
+                           "DOID": r[3]}
             elif src == "medquad_qa":
                 # 公开版：MedQuAD 问答（doc 形如 qa_123）
                 qid = doc.split("_", 1)[1] if "_" in doc else ""

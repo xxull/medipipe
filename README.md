@@ -45,11 +45,15 @@
 | `data/开放数据/药品_openfda.jsonl` | 1000 | 药品说明书：品牌名、通用名、厂商、适应症、用法用量、警示 | **CC0-1.0**（美国公共领域，[openFDA](https://open.fda.gov)） |
 | `data/开放数据/问答_medquad.jsonl` | 2000 | 医学问答（患者教育），来自 NIH 网站 | **CC BY 4.0**（[MedQuAD](https://github.com/abachaa/MedQuAD)，署名要求见文末） |
 
-想自己再抓一份（数据会更新）：
+想自己再抓一份（数据会更新、也可以抓更多）：
 
 ```bash
-python tools/下载开放数据.py --openfda 2000 --medquad 5000
+# 仓库里只放了一小份（够跑通）；想喂饱检索，可以抓大的：
+python tools/下载开放数据.py --openfda 20000 --medquad 0 --medquad-zip --doid 99999
+python tools/导入开放数据.py --rebuild
 ```
+
+> 演示站就是这么喂的：3,000 条合成病例 + 20,000 条 openFDA 药品 + 16,000 条 MedQuAD 问答 + 15,000 条疾病本体词表（全部是免费公开数据）。
 
 > 真实病历（MIMIC-IV / eICU / 中文处方数据）受协议或版权限制，
 > **本仓库不附带、不再分发**。怎么自己拿到并导入，见下面「接真实数据」一节。
@@ -311,6 +315,7 @@ Key 在「自检」页填。
 | 合成病例、症状词表 | 本项目生成，随代码同一许可 |
 | `药品_openfda.jsonl` | CC0-1.0（美国公共领域） |
 | `问答_medquad.jsonl` | CC BY 4.0，需保留署名 |
+| `疾病词表_doid.jsonl`（可选下载） | CC BY 4.0（[Disease Ontology](https://github.com/DiseaseOntology/HumanDiseaseOntology)），需保留署名 |
 | 你自己导入的 MIMIC / eICU / dayi 数据 | 遵守各自协议，**不在本仓库许可范围内** |
 
 ---
@@ -325,6 +330,11 @@ Key 在「自检」页填。
   > Ben Abacha, A., & Demner-Fushman, D. (2019).
   > *A Question-Entailment Approach to Question Answering.*
   > BMC Bioinformatics, 20(1), 511.
+
+- 疾病词表来自 **Disease Ontology**，CC BY 4.0：
+  <https://github.com/DiseaseOntology/HumanDiseaseOntology>
+
+  > Schriml LM, et al. *Human Disease Ontology 2024 update.* Nucleic Acids Research.
 
 - 向量检索用 **bge-m3**，本地推理用 [Ollama](https://ollama.com)，界面用 [Streamlit](https://streamlit.io)。
 

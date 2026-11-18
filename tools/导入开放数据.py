@@ -31,9 +31,10 @@ DB = ROOT / "data" / "records.db"
 OPEN_DIR = ROOT / "data" / "开放数据"
 FTS = "search_fts"
 
-#: 这两张表在全文索引里用的 src 名
+#: 这几张表在全文索引里用的 src 名
 SRC_DRUG = "drugs"
 SRC_QA = "medquad_qa"
+SRC_DOID = "doid"
 
 
 def _lines(path: Path):
@@ -69,6 +70,15 @@ def _ensure(conn) -> None:
         " qid TEXT, question TEXT, answer TEXT, focus TEXT, qtype TEXT,"
         " source TEXT, url TEXT, license TEXT)"
     )
+    # 疾病本体词表（Disease Ontology，CC BY 4.0）
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS doid ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " doid TEXT, name TEXT, definition TEXT, synonyms TEXT, parents TEXT)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doid_name ON doid(name)"
+    )
     conn.execute(
         "CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5("
         " body, src UNINDEXED, doc UNINDEXED, tokenize='unicode61')" % FTS
@@ -84,11 +94,15 @@ def _clear(conn) -> None:
     """
     conn.execute("DELETE FROM medquad_qa")
     try:
+        conn.execute("DELETE FROM doid")
+    except sqlite3.Error:
+        pass
+    try:
         conn.execute("DELETE FROM drugs WHERE source=? OR license LIKE 'CC0%'",
                      ("openFDA drug label",))
     except sqlite3.Error:
         conn.execute("DELETE FROM drugs")
-    for src in (SRC_DRUG, SRC_QA):
+    for src in (SRC_DRUG, SRC_QA, SRC_DOID):
         try:
             conn.execute("DELETE FROM %s WHERE src=?" % FTS, (src,))
         except sqlite3.Error:
@@ -126,8 +140,27 @@ def load_qa(conn) -> int:
     return len(rows)
 
 
+def load_doid(conn) -> int:
+    rows = list(_lines(OPEN_DIR / "疾病词表_doid.jsonl"))
+    if not rows:
+        return 0
+    conn.executemany(
+        "INSERT INTO doid (doid, name, definition, synonyms, parents)"
+        " VALUES (:doid, :name, :definition, :synonyms, :parents)",
+        [{
+            "doid": r.get("id", ""),
+            "name": r.get("name", ""),
+            "definition": r.get("definition", ""),
+            "synonyms": "；".join(r.get("synonyms") or [])[:600],
+            "parents": "；".join(r.get("parents") or [])[:300],
+        } for r in rows],
+    )
+    conn.commit()
+    return len(rows)
+
+
 def build_fts(conn) -> int:
-    """给这两张表重写全文索引（其它来源保持不动）。"""
+    """给这几张表重写全文索引（其它来源保持不动）。"""
     buf = []
     n = 0
 
@@ -157,6 +190,16 @@ def build_fts(conn) -> int:
         if len(buf) >= 2000:
             flush()
 
+    for did, name, definition, syn in conn.execute(
+        "SELECT id, IFNULL(name,''), IFNULL(definition,''), IFNULL(synonyms,'') FROM doid"
+    ):
+        body = to_index_text((name + " " + syn + " " + definition)[:4000])
+        if body:
+            buf.append((body, SRC_DOID, "doid_%s" % did))
+            n += 1
+        if len(buf) >= 2000:
+            flush()
+
     flush()
     conn.commit()
     try:
@@ -168,10 +211,14 @@ def build_fts(conn) -> int:
 
 
 def main() -> int:
+    global OPEN_DIR
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=str(DB))
+    ap.add_argument("--dir", default=str(OPEN_DIR), help="开放数据 JSONL 目录")
     ap.add_argument("--rebuild", action="store_true")
     args = ap.parse_args()
+
+    OPEN_DIR = Path(args.dir)
 
     db = Path(args.db)
     db.parent.mkdir(parents=True, exist_ok=True)
@@ -183,16 +230,18 @@ def main() -> int:
             _clear(conn)
         nd = load_drugs(conn)
         nq = load_qa(conn)
+        nb = load_doid(conn)
         nf = build_fts(conn)
     finally:
         conn.close()
 
     print("药品：%d 条" % nd)
     print("问答：%d 条" % nq)
-    print("全文索引：%d 条（%s / %s）" % (nf, SRC_DRUG, SRC_QA))
+    print("疾病词表：%d 条" % nb)
+    print("全文索引：%d 条（%s / %s / %s）" % (nf, SRC_DRUG, SRC_QA, SRC_DOID))
     print("库：%s  用时 %.1f 秒" % (db, time.time() - t0))
-    if not nd and not nq:
-        print("没找到 data/开放数据/*.jsonl，先跑 python tools\\下载开放数据.py")
+    if not nd and not nq and not nb:
+        print("没找到 %s/*.jsonl，先跑 python tools\\下载开放数据.py" % OPEN_DIR)
         return 1
     return 0
 

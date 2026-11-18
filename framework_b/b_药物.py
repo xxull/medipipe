@@ -41,12 +41,15 @@ def for_disease_zh(name: str, limit: int = 8) -> List[Dict]:
     try:
         # 先粗筛（SQL LIKE），多取一些再精筛（只在适应症里判定）。
         # 只取 limit*3 会抽到一堆"正文提到但适应症没提"的，命中率很低。
-        rows = conn.execute(
-            "SELECT title, url, fields FROM dayi_pages"
-            " WHERE type='drug' AND (fields LIKE ? OR title LIKE ?)"
-            " LIMIT ?",
-            ("%%%s%%" % kw, "%%%s%%" % kw, max(300, limit * 30)),
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                "SELECT title, url, fields FROM dayi_pages"
+                " WHERE type='drug' AND (fields LIKE ? OR title LIKE ?)"
+                " LIMIT ?",
+                ("%%%s%%" % kw, "%%%s%%" % kw, max(300, limit * 30)),
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []      # 公开版没有 dayi 表，直接走 openFDA
     finally:
         conn.close()
 

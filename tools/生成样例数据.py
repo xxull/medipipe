@@ -139,6 +139,24 @@ def main() -> int:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     print("已生成 %d 条合成病例 → %s" % (len(rows), case_file))
+
+    # 症状词表：把各科室的症状去重导一份，给「关键词检索」演示用。
+    # 以前这份是从 dayi 抄标题来的（有版权），现在改成纯合成。
+    syn_file = OUT / "症状样例.jsonl"
+    seen = set()
+    with open(syn_file, "w", encoding="utf-8") as f:
+        for dept, info in DEPTS.items():
+            for name in info["symptoms"]:
+                if name in seen:
+                    continue
+                seen.add(name)
+                f.write(json.dumps({
+                    "symptom": name,
+                    "dept": dept,
+                    "source": "合成词表（本脚本生成）",
+                    "license": "本项目生成，无第三方版权",
+                }, ensure_ascii=False) + "\n")
+    print("已生成 %d 个症状词 → %s" % (len(seen), syn_file))
     print("\n科室分布：")
     from collections import Counter
 

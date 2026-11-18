@@ -27,9 +27,26 @@ DB = Path(__file__).resolve().parent.parent / "data" / "records.db"
 #: 药品说明书里优先展示的字段顺序
 DRUG_KEYS = ["适应症", "适应病症", "功能主治", "用法用量", "不良反应", "禁忌", "注意事项"]
 
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+
 
 def _clean(name: str) -> str:
     return re.sub(r"\s+", " ", (name or "").strip())
+
+
+def _fda_row(conn, name: str):
+    """在openFDA 药品里找一条：先精确，再模糊（翻译过来的英文名常常对不齐）。"""
+    row = conn.execute(
+        "SELECT brand_name, generic_name, indications, dosage, warnings, manufacturer"
+        " FROM drugs WHERE brand_name=? OR generic_name=? LIMIT 1", (name, name)
+    ).fetchone()
+    if row:
+        return row
+    return conn.execute(
+        "SELECT brand_name, generic_name, indications, dosage, warnings, manufacturer"
+        " FROM drugs WHERE generic_name LIKE ? OR brand_name LIKE ? LIMIT 1",
+        ("%%%s%%" % name, "%%%s%%" % name),
+    ).fetchone()
 
 
 def drug(name: str) -> Dict:
@@ -41,11 +58,14 @@ def drug(name: str) -> Dict:
         return {}
     conn = sqlite3.connect(str(DB), timeout=60)
     try:
-        row = conn.execute(
-            "SELECT title, url, fields, text FROM dayi_pages"
-            " WHERE type='drug' AND (title LIKE ? OR title=?) LIMIT 1",
-            ("%" + n + "%", n),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                "SELECT title, url, fields, text FROM dayi_pages"
+                " WHERE type='drug' AND (title LIKE ? OR title=?) LIMIT 1",
+                ("%" + n + "%", n),
+            ).fetchone()
+        except sqlite3.Error:
+            row = None       # 公开版没有 dayi 表，直接走 openFDA
         if row:
             title, url, fields_json, text = row
             try:
@@ -61,14 +81,24 @@ def drug(name: str) -> Dict:
                 "链接": url,
             }
 
-        row = conn.execute(
-            "SELECT brand_name, generic_name, indications, dosage, warnings, manufacturer"
-            " FROM drugs WHERE brand_name=? OR generic_name=? LIMIT 1", (n, n)
-        ).fetchone()
+        row = _fda_row(conn, n)
+        looked_up = n
+        # 中文药名在 openFDA 里查不到：翻成英文再查一次。
+        # 译文会进翻译缓存，同一次会话里再点就很快。
+        if not row and _CJK.search(n):
+            try:
+                from framework_b import b_翻译
+
+                en = b_翻译.text(n, "en")
+            except Exception:
+                en = ""
+            if en and en != n and not _CJK.search(en):
+                row = _fda_row(conn, en)
+                looked_up = en
         if row:
             return {
                 "名称": row[0] or row[1],
-                "来源": "openFDA（英文）",
+                "来源": "openFDA（英文）" + ("，中文名译为 %s" % looked_up if looked_up != n else ""),
                 "类型": "处方药/OTC",
                 "要点": {
                     "适应症": (row[2] or "")[:400],
@@ -89,10 +119,13 @@ def disease(name: str) -> Dict:
         return {}
     conn = sqlite3.connect(str(DB), timeout=60)
     try:
-        row = conn.execute(
-            "SELECT title, url, text FROM dayi_pages WHERE type='disease' AND title LIKE ? LIMIT 1",
-            ("%" + n + "%",),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                "SELECT title, url, text FROM dayi_pages WHERE type='disease' AND title LIKE ? LIMIT 1",
+                ("%" + n + "%",),
+            ).fetchone()
+        except sqlite3.Error:
+            row = None
         if row:
             return {
                 "名称": row[0],

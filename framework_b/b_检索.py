@@ -70,6 +70,7 @@ MAX_ROWS = 3_000_000
 DEFAULT_TABLES = [
     "case_corpus",          # 病例库（诊断+用药+症状文本）
     "huatuo_qa",            # 中文问答
+    "medquad_qa",           # 英文医学问答（公开数据，CC BY 4.0）
     "drugs",                # 药品
     "miv_d_icd_diagnoses",  # 诊断字典
     "miv_d_icd_procedures",  # 手术字典
@@ -126,6 +127,18 @@ def search_fts(keyword: str, limit: int = 5, db: Optional[str] = None) -> List[D
                 if r:
                     rec = {"id": r[0], "科室": r[3], "疾病": r[4],
                            "问": str(r[1])[:300], "答": str(r[2])[:300]}
+            elif src == "medquad_qa":
+                # 公开版：MedQuAD 问答（doc 形如 qa_123）
+                qid = doc.split("_", 1)[1] if "_" in doc else ""
+                try:
+                    r = conn.execute(
+                        "SELECT question, answer, focus, source, url FROM medquad_qa WHERE id=?",
+                        (qid,)).fetchone()
+                except sqlite3.Error:
+                    r = None
+                if r:
+                    rec = {"问": str(r[0])[:300], "答": str(r[1])[:300],
+                           "主题": r[2], "来源": r[3], "链接": r[4]}
             elif src == "drugs":
                 r = conn.execute(
                     "SELECT id, brand_name, generic_name, indications, quality FROM drugs WHERE 'drug_'||id=?",

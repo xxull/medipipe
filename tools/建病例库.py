@@ -47,14 +47,38 @@ def clean_list(items, limit: int = 8):
     return out[:limit]
 
 
+#: 基础列 + 检索/筛选要用的扩展列（dept / age / age_band / gender）
+BASE_COLS = [
+    ("case_id", "TEXT PRIMARY KEY"), ("source", "TEXT"), ("text", "TEXT"),
+    ("diseases", "TEXT"), ("drugs", "TEXT"), ("created_at", "TEXT"),
+]
+EXTRA_COLS = [("dept", "TEXT"), ("age", "INTEGER"), ("age_band", "TEXT"), ("gender", "TEXT")]
+
+INSERT_SQL = (
+    "INSERT OR REPLACE INTO case_corpus"
+    " (case_id, source, text, diseases, drugs, created_at)"
+    " VALUES (?,?,?,?,?,datetime('now'))"
+)
+
+
 def ensure(conn: sqlite3.Connection) -> None:
-    conn.execute("DROP TABLE IF EXISTS case_corpus")
+    """
+    建表 / 补列，但**不删别人写的数据**。
+
+    以前这里是 DROP TABLE 重建，跑一次就把「导入样例数据」写进去的样例、
+    以及 dept/age/age_band 这些扩展列一起抹掉了。改成：缺列补列，
+    只清掉本脚本负责的来源（mimic / eicu）。
+    """
     conn.execute(
-        "CREATE TABLE case_corpus ("
-        " case_id TEXT PRIMARY KEY, source TEXT, text TEXT,"
-        " diseases TEXT, drugs TEXT, created_at TEXT)"
+        "CREATE TABLE IF NOT EXISTS case_corpus (%s)"
+        % ", ".join("%s %s" % (c, t) for c, t in BASE_COLS)
     )
-    conn.execute("CREATE INDEX idx_case_source ON case_corpus(source)")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(case_corpus)")}
+    for name, typ in EXTRA_COLS:
+        if name not in cols:
+            conn.execute("ALTER TABLE case_corpus ADD COLUMN %s %s" % (name, typ))
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_source ON case_corpus(source)")
+    conn.execute("DELETE FROM case_corpus WHERE source IN ('mimic', 'eicu')")
     conn.commit()
 
 
@@ -96,7 +120,7 @@ def build_mimic(conn: sqlite3.Connection, limit: int) -> int:
         drugs = clean_list((drugs_map.get(hadm) or "").split("||"), 10)
         text = "诊断：%s。用药：%s。" % ("；".join(dis), "、".join(drugs) or "无")
         conn.execute(
-            "INSERT OR REPLACE INTO case_corpus VALUES (?,?,?,?,?,datetime('now'))",
+            INSERT_SQL,
             ("miv_%s" % hadm, "mimic", text[:1500],
              json.dumps(dis, ensure_ascii=False), json.dumps(drugs, ensure_ascii=False)),
         )
@@ -149,7 +173,7 @@ def build_eicu(conn: sqlite3.Connection, limit: int) -> int:
             "、".join(drugs) or "无",
         )
         conn.execute(
-            "INSERT OR REPLACE INTO case_corpus VALUES (?,?,?,?,?,datetime('now'))",
+            INSERT_SQL,
             ("eicu_%s" % pid, "eicu", text[:1500],
              json.dumps(dis, ensure_ascii=False), json.dumps(drugs, ensure_ascii=False)),
         )

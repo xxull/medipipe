@@ -5,8 +5,9 @@
 做的事情
 -------------------------------------------------------------------------
     1. 把 data/样例数据/病例样例.jsonl 写进 case_corpus（source='sample'）
-    2. 给这 204 条建向量（bge-m3，约 20 秒）
-    3. 打印结果，告诉你可以打开 B 了
+    2. 顺手把它们塞进全文索引（关键词检索能搜到）
+    3. 给这 204 条建向量（bge-m3，约 20 秒）
+    4. 打印结果，告诉你可以打开 B 了
 
 用法
 -------------------------------------------------------------------------
@@ -21,6 +22,10 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from framework_b.b_分词 import to_index_text  # noqa: E402
+
 DB = ROOT / "data" / "records.db"
 SAMPLE = ROOT / "data" / "样例数据" / "病例样例.jsonl"
 
@@ -62,8 +67,23 @@ def main() -> int:
         ],
     )
     conn.commit()
-    conn.close()
     print("已写入 case_corpus（source=sample）")
+
+    # 顺手把病例写进全文索引，这样「关键词检索」不用退回 LIKE 全表扫
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5("
+        " body, src UNINDEXED, doc UNINDEXED, tokenize='unicode61')"
+    )
+    conn.execute("DELETE FROM search_fts WHERE src='case_corpus'")
+    buf = []
+    for cid, text in conn.execute("SELECT case_id, text FROM case_corpus WHERE source='sample'"):
+        body = to_index_text(str(text or "")[:4000])
+        if body:
+            buf.append((body, "case_corpus", cid))
+    conn.executemany("INSERT INTO search_fts(body, src, doc) VALUES (?,?,?)", buf)
+    conn.commit()
+    print("已建全文索引：%d 条" % len(buf))
+    conn.close()
 
     print("\n开始建向量（204 条，约 20 秒）…")
     rc = subprocess.run([sys.executable, "-u", str(ROOT / "tools" / "建向量.py")], cwd=str(ROOT)).returncode

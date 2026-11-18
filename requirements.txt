@@ -9,6 +9,3 @@ requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.0
 brotli>=1.1
-
-# Only used by legacy_旧版/ page
-streamlit-sortables>=0.3.1

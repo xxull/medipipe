@@ -25,6 +25,8 @@ data/*
 !data/README.md
 !data/样例数据/
 !data/样例数据/**
+!data/开放数据/
+!data/开放数据/**
 
 # ---- 日志与临时文件 ----
 *.log

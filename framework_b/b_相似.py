@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from collections import Counter
 from pathlib import Path
@@ -431,6 +432,21 @@ def details(case_ids) -> Dict[str, Dict[str, Any]]:
         conn.close()
 
 
+def _one(conn, sql: str, args=()):
+    """
+    查一行；表不存在就返回 None。
+
+    公开版仓库里没有 MIMIC/eICU/Huatuo/dayi 那些表，详情页不能因为
+    "某张可选表不存在"就整条报错。
+    """
+    import sqlite3
+
+    try:
+        return conn.execute(sql, args).fetchone()
+    except sqlite3.Error:
+        return None
+
+
 def _detail_with(conn, case_id: str) -> Dict[str, Any]:
     """
     在一个已有连接上取详情（不负责开关连接）。
@@ -456,34 +472,38 @@ def _detail_with(conn, case_id: str) -> Dict[str, Any]:
 
         if case_id.startswith("miv_"):
             hadm = case_id[4:]
-            adm = conn.execute(
+            adm = _one(
+                conn,
                 "SELECT admittime, dischtime, admission_type, hospital_expire_flag"
                 " FROM miv_admissions WHERE hadm_id=?", (hadm,)
-            ).fetchone()
+            )
             if adm:
                 out["extra"]["住院信息"] = {
                     "入院": adm[0], "出院": adm[1], "类型": adm[2],
                     "院内死亡": "是" if str(adm[3]) == "1" else "否",
                 }
-            note = conn.execute(
-                "SELECT text FROM note_discharge WHERE hadm_id=? LIMIT 1", (hadm,)
-            ).fetchone()
+            note = _one(
+                conn, "SELECT text FROM note_discharge WHERE hadm_id=? LIMIT 1", (hadm,)
+            )
             if note:
                 out["extra"]["出院小结（节选）"] = str(note[0])[:1500]
 
         elif case_id.startswith("eicu_"):
             pid = case_id[5:]
-            his = [r[0] for r in conn.execute(
-                "SELECT pasthistoryvalue FROM eicu_pasthistory WHERE patientunitstayid=? LIMIT 15",
-                (pid,)) if r[0]]
+            try:
+                his = [r[0] for r in conn.execute(
+                    "SELECT pasthistoryvalue FROM eicu_pasthistory WHERE patientunitstayid=? LIMIT 15",
+                    (pid,)) if r[0]]
+            except sqlite3.Error:
+                his = []
             if his:
                 out["extra"]["既往史"] = "；".join(dict.fromkeys(his))[:800]
 
         elif case_id.startswith("ht_"):
             qid = case_id[3:]
-            qa = conn.execute(
-                "SELECT question, answer, label FROM huatuo_qa WHERE id=?", (qid,)
-            ).fetchone()
+            qa = _one(
+                conn, "SELECT question, answer, label FROM huatuo_qa WHERE id=?", (qid,)
+            )
             if qa:
                 out["extra"]["科室"] = qa[2]
                 out["extra"]["问答原文"] = "问：%s\n答：%s" % (str(qa[0])[:800], str(qa[1])[:800])

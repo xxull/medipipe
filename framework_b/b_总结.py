@@ -118,21 +118,23 @@ def summarize(text: str, use_master: bool | None = None) -> str:
     """
     把病历文本提炼成六段要点。
 
-    use_master=None 时自动判断：有 Key 就用主模型，没 Key 用本地模型。
-    主模型调用失败（Key 过期、断网、超预算）会自动退回本地，不让页面炸。
+    use_master=None 时自动判断：有 Key 就用主模型（失败退回本地），没 Key 用本地模型。
+    use_master=True 表示明确要求主模型：Key 无效、断网、超预算都会把异常抛出来，
+    让界面说清原因（而不是悄悄退回本地让人干等 20 秒）。
+    use_master=False 强制本地模型。
     """
     t = (text or "").strip()
     if len(t) < 20:
         return "文本太短（少于 20 字），没法总结。"
 
-    if use_master is None:
-        use_master = has_key()
+    if use_master is True:
+        return summarize_master(t)
 
-    if use_master:
+    if use_master is None and has_key():
         try:
             return summarize_master(t)
         except Exception:
-            pass          # 退回本地模型
+            pass          # 自动模式下退回本地
 
     out = _ollama("/no_think " + (PROMPT % t[:6000]), timeout=300)
     return (out or "").strip() or "（模型没有返回内容）"
